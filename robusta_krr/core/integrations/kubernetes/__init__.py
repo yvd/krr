@@ -17,7 +17,6 @@ from kubernetes.client.models import (
     V1StatefulSet,
     V2HorizontalPodAutoscaler,
 )
-
 from robusta_krr.core.models.config import settings
 from robusta_krr.core.models.objects import HPAData, K8sObjectData, KindLiteral, PodData
 from robusta_krr.core.models.result import ResourceAllocations

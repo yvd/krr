@@ -26,6 +26,7 @@ from robusta_krr.utils.intro import load_intro_message
 from robusta_krr.utils.progress_bar import ProgressBar
 from robusta_krr.utils.version import get_version, load_latest_version
 from robusta_krr.utils.patch import create_monkey_patches
+from robusta_krr.core.integrations.kubernetes.resource_patch import create_resource_patcher
 
 logger = logging.getLogger("krr")
 
@@ -117,7 +118,10 @@ class Runner:
         custom_print(formatted, rich=rich, force=True)
 
         if settings.auto_apply:
+            logger.info("Applying recommendations")
             self._apply_recommendations(result)
+        else:
+            logger.info("Skipping recommendations")
 
         if settings.file_output_dynamic or settings.file_output or settings.slack_output or settings.azureblob_output:
             if settings.file_output_dynamic:
@@ -171,12 +175,42 @@ class Runner:
     def _apply_recommendations(self, result: Result):
         for scan in result.scans:
             for resource in ResourceType:
-                if scan.recommended.requests[resource].request is not None:
-                    self._apply_recommendation(scan.object, resource, scan.recommended.requests[resource].request)
+                recommendation = scan.recommended.requests[resource]
+                # Handle both Recommendation objects and direct values
+                if hasattr(recommendation, 'value'):
+                    value = recommendation.value
+                else:
+                    value = recommendation
 
-    # TODO: Implement this
+                if value is not None and value != "?" and isinstance(value, (int, float)) and value > 0:
+                    self._apply_recommendation(scan.object, resource, value)
+                else:
+                    logger.info(f"Skipping invalid recommendation for {scan.object} {resource}: {value}")
+
     def _apply_recommendation(self, object: K8sObjectData, resource: ResourceType, request: float):
-        pass
+        """Apply a resource recommendation to a Kubernetes workload"""
+        if request is None or request <= 0:
+            logger.debug(f"Skipping invalid recommendation for {object} {resource}: {request}")
+            return
+
+        try:
+            patcher = create_resource_patcher(object.cluster)
+            # Run the async patch operation
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an async context, schedule the task
+                task = asyncio.create_task(
+                    patcher.apply_resource_recommendation(object, resource, request)
+                )
+                # Don't wait for completion to avoid blocking
+                logger.info(f"Scheduled {resource.value} recommendation update for {object.kind} {object.namespace}/{object.name}")
+            else:
+                # If not in async context, run directly
+                success = asyncio.run(patcher.apply_resource_recommendation(object, resource, request))
+                if not success:
+                    logger.warning(f"Failed to apply {resource.value} recommendation for {object.kind} {object.namespace}/{object.name}")
+        except Exception as e:
+            logger.error(f"Error applying {resource.value} recommendation for {object}: {e}")
 
     def _upload_to_azure_blob(self, file_name: str, base_sas_url: str):
         try:
