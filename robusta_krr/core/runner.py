@@ -116,6 +116,9 @@ class Runner:
 
         custom_print(formatted, rich=rich, force=True)
 
+        if settings.auto_apply:
+            self._apply_recommendations(result)
+
         if settings.file_output_dynamic or settings.file_output or settings.slack_output or settings.azureblob_output:
             if settings.file_output_dynamic:
                 current_datetime = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -164,6 +167,16 @@ class Runner:
                 )
                 
                 os.remove(file_name)
+
+    def _apply_recommendations(self, result: Result):
+        for scan in result.scans:
+            for resource in ResourceType:
+                if scan.recommended.requests[resource].request is not None:
+                    self._apply_recommendation(scan.object, resource, scan.recommended.requests[resource].request)
+
+    # TODO: Implement this
+    def _apply_recommendation(self, object: K8sObjectData, resource: ResourceType, request: float):
+        pass
 
     def _upload_to_azure_blob(self, file_name: str, base_sas_url: str):
         try:

@@ -326,6 +326,12 @@ def load_commands() -> None:
                     help="A list of sinks to send the scan to",
                     rich_help_panel="Publish Scan Settings",
                 ),
+                auto_apply: bool = typer.Option(
+                    False,
+                    "--auto-apply",
+                    help="Automatically apply the recommendations",
+                    rich_help_panel="Recommendation Settings",
+                ),
                 **strategy_args,
             ) -> None:
                 f"""Run KRR using the `{_strategy_name}` strategy"""
@@ -380,6 +386,7 @@ def load_commands() -> None:
                         start_time=start_time,
                         scan_id=scan_id,
                         named_sinks=named_sinks,
+                        auto_apply=auto_apply,
                         )
                     Config.set_config(config)
                 except ValidationError as e:

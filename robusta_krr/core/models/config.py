@@ -77,6 +77,9 @@ class Config(pd.BaseSettings):
     azure_subscription_id: Optional[str] = pd.Field(None)
     azure_resource_group: Optional[str] = pd.Field(None)
 
+    # Auto Apply Settings
+    auto_apply: bool = pd.Field(False)
+
     other_args: dict[str, Any]
 
     # Internal
