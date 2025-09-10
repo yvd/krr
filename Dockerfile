@@ -25,4 +25,4 @@ COPY ./robusta_krr/ robusta_krr/
 COPY ./intro.txt intro.txt
 
 # Run the application using 'poetry run krr simple'
-CMD ["python", "krr.py", "simple"]
+CMD ["python", "krr.py", "simple", "-p", "prometheus-server.prometheus.svc.cluster.local:9090", "-f", "csv"]
