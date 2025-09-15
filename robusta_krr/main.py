@@ -16,6 +16,7 @@ from typer.models import OptionInfo
 from robusta_krr import formatters as concrete_formatters  # noqa: F401
 from robusta_krr.core.abstract import formatters
 from robusta_krr.core.abstract.strategies import BaseStrategy
+from robusta_krr.core.models.enum import PatcherMode
 from robusta_krr.core.models.config import Config
 from robusta_krr.core.runner import Runner, publish_input_error
 from robusta_krr.utils.version import get_version
@@ -326,10 +327,10 @@ def load_commands() -> None:
                     help="A list of sinks to send the scan to",
                     rich_help_panel="Publish Scan Settings",
                 ),
-                auto_apply: bool = typer.Option(
-                    False,
-                    "--auto-apply",
-                    help="Automatically apply the recommendations",
+                patcher_mode: Optional[PatcherMode] = typer.Option(
+                    PatcherMode.DRY_RUN.value,
+                    "--patcher-mode",
+                    help="Mode to apply the recommendations",
                     rich_help_panel="Recommendation Settings",
                 ),
                 **strategy_args,
@@ -386,7 +387,7 @@ def load_commands() -> None:
                         start_time=start_time,
                         scan_id=scan_id,
                         named_sinks=named_sinks,
-                        auto_apply=auto_apply,
+                        patcher_mode=patcher_mode,
                         )
                     Config.set_config(config)
                 except ValidationError as e:

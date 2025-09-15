@@ -27,6 +27,7 @@ from robusta_krr.utils.progress_bar import ProgressBar
 from robusta_krr.utils.version import get_version, load_latest_version
 from robusta_krr.utils.patch import create_monkey_patches
 from robusta_krr.core.integrations.kubernetes.resource_patch import create_resource_patcher
+from robusta_krr.core.models.enum import PatcherMode
 
 logger = logging.getLogger("krr")
 
@@ -106,7 +107,7 @@ class Runner:
             custom_print(f"[yellow bold]A newer version of KRR is available: {latest_version}[/yellow bold]")
         custom_print("")
 
-    def _process_result(self, result: Result) -> None:
+    async def _process_result(self, result: Result) -> None:
         result.errors = self.errors
 
         Formatter = settings.Formatter
@@ -116,10 +117,10 @@ class Runner:
         rich = getattr(Formatter, "__rich_console__", False)
 
         custom_print(formatted, rich=rich, force=True)
-
-        if settings.auto_apply:
-            logger.info("Applying recommendations")
-            self._apply_recommendations(result)
+        dry_run = settings.patcher_mode == PatcherMode.DRY_RUN
+        if settings.patcher_mode == PatcherMode.ON or dry_run:
+            logger.info(f"Applying recommendations DRY RUN={dry_run}")
+            await self._apply_recommendations(result, dry_run)
         else:
             logger.info("Skipping recommendations")
 
@@ -172,7 +173,10 @@ class Runner:
                 
                 os.remove(file_name)
 
-    def _apply_recommendations(self, result: Result):
+    async def _apply_recommendations(self, result: Result, dry_run: bool):
+        # Collect all patch tasks to run them concurrently
+        patch_tasks = []
+        
         for scan in result.scans:
             for resource in ResourceType:
                 recommendation = scan.recommended.requests[resource]
@@ -183,14 +187,48 @@ class Runner:
                     value = recommendation
 
                 if value is not None and value != "?" and isinstance(value, (int, float)) and value > 0:
-                    self._apply_recommendation(scan.object, resource, value)
+                    task = self._create_patch_task(scan.object, resource, value, dry_run)
+                    if task:
+                        patch_tasks.append(task)
                 else:
                     logger.info(f"Skipping invalid recommendation for {scan.object} {resource}: {value}")
+        
+        # Run all patches concurrently and wait for completion
+        if patch_tasks:
+            logger.info(f"Applying {len(patch_tasks)} resource recommendations...")
+            results = await asyncio.gather(*patch_tasks, return_exceptions=True)
+            
+            # Log results
+            success_count = 0
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Patch task {i} failed: {result}")
+                elif result:
+                    success_count += 1
+            
+            logger.info(f"Successfully applied {success_count}/{len(patch_tasks)} resource recommendations")
 
-    def _apply_recommendation(self, object: K8sObjectData, resource: ResourceType, request: float):
-        """Apply a resource recommendation to a Kubernetes workload"""
+    def _create_patch_task(self, object: K8sObjectData, resource: ResourceType, request: float, dry_run: bool):
+        """Create a patch task for applying a resource recommendation"""
         if request is None or request <= 0:
-            logger.debug(f"Skipping invalid recommendation for {object} {resource}: {request}")
+            logger.debug(f"DRY RUN={dry_run} Skipping invalid recommendation for {object} {resource}: {request}")
+            return None
+        if object.kind != "Deployment":
+            logger.info(f"Skipping {object.kind} {object.namespace}/{object.name} for resource recommendation, currently only supporting Deployment")
+            return None
+
+        try:
+            patcher = create_resource_patcher(object.cluster)
+            logger.info(f"DRY RUN={dry_run} Scheduling {resource.value} recommendation update for {object.kind} {object.namespace}/{object.name}")
+            return patcher.apply_resource_recommendation(object, resource, request, dry_run)
+        except Exception as e:
+            logger.error(f"DRY RUN={dry_run} Error creating patch task for {object} {resource}: {e}")
+            return None
+
+    def _apply_recommendation(self, object: K8sObjectData, resource: ResourceType, request: float, dry_run: bool):
+        """Apply a resource recommendation to a Kubernetes workload (legacy method)"""
+        if request is None or request <= 0:
+            logger.debug(f"DRY RUN={dry_run} Skipping invalid recommendation for {object} {resource}: {request}")
             return
 
         try:
@@ -200,17 +238,17 @@ class Runner:
             if loop.is_running():
                 # If we're already in an async context, schedule the task
                 task = asyncio.create_task(
-                    patcher.apply_resource_recommendation(object, resource, request)
+                    patcher.apply_resource_recommendation(object, resource, request, dry_run)
                 )
                 # Don't wait for completion to avoid blocking
-                logger.info(f"Scheduled {resource.value} recommendation update for {object.kind} {object.namespace}/{object.name}")
+                logger.info(f"DRY RUN={dry_run} Scheduled {resource.value} recommendation update for {object.kind} {object.namespace}/{object.name}")
             else:
                 # If not in async context, run directly
-                success = asyncio.run(patcher.apply_resource_recommendation(object, resource, request))
-                if not success:
+                success = asyncio.run(patcher.apply_resource_recommendation(object, resource, request, dry_run))
+                if not success and not dry_run:
                     logger.warning(f"Failed to apply {resource.value} recommendation for {object.kind} {object.namespace}/{object.name}")
         except Exception as e:
-            logger.error(f"Error applying {resource.value} recommendation for {object}: {e}")
+            logger.error(f"DRY RUN={dry_run} Error applying {resource.value} recommendation for {object}: {e}")
 
     def _upload_to_azure_blob(self, file_name: str, base_sas_url: str):
         try:
@@ -555,7 +593,7 @@ class Runner:
 
             result = await self._collect_result()
             logger.info("Result collected, displaying...")
-            self._process_result(result)
+            await self._process_result(result)
         except (ClusterNotSpecifiedException, CriticalRunnerException) as e:
             logger.critical(e)
             publish_error(traceback.format_exc())

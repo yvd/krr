@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from robusta_krr.core.abstract import formatters
 from robusta_krr.core.abstract.strategies import AnyStrategy, BaseStrategy
+from robusta_krr.core.models.enum import PatcherMode
 from robusta_krr.core.models.objects import KindLiteral
 
 logger = logging.getLogger("krr")
@@ -77,9 +78,8 @@ class Config(pd.BaseSettings):
     azure_subscription_id: Optional[str] = pd.Field(None)
     azure_resource_group: Optional[str] = pd.Field(None)
 
-    # Auto Apply Settings
-    auto_apply: bool = pd.Field(False)
-
+    # Patcher Mode Settings
+    patcher_mode: Optional[PatcherMode] = pd.Field(None)
     other_args: dict[str, Any]
 
     # Internal
