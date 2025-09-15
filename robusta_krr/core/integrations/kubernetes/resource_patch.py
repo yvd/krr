@@ -126,8 +126,10 @@ class ResourcePatcher:
                 "path": patch_path,
                 "value": resource_value
             }]
-
-            logger.info(f"Applying {resource_type.value} recommendation for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: {current_value} -> {resource_value}")
+            if current_value == resource_value:
+                logger.info(f"Skipping {resource_type.value} recommendation patch, no change for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_value} == recommended={resource_value}")
+                return True
+            logger.info(f"DRY RUN={dry_run} Applying {resource_type.value} recommendation for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_value} -> recommended={resource_value}")
             if not dry_run:
                 # Apply the patch based on workload type
                 success = await self._patch_workload(object_data, patch)
