@@ -173,6 +173,7 @@ class Runner:
                 
                 os.remove(file_name)
 
+    # FIXME: currently we are only applying request recommendations and only for deployments
     async def _apply_recommendations(self, result: Result, dry_run: bool):
         # Collect all patch tasks to run them concurrently
         patch_tasks = []
