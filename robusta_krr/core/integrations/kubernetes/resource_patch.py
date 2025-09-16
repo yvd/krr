@@ -106,35 +106,60 @@ class ResourcePatcher:
             container_index = self._get_container_index(object_data)
             
             # Create patch for updating the resource request
-            patch_path = f"/spec/template/spec/containers/{container_index}/resources/requests/{resource_type.value}"
+            request_patch_path = f"/spec/template/spec/containers/{container_index}/resources/requests/{resource_type.value}"
             if object_data.kind == "CronJob":
-                patch_path = f"/spec/jobTemplate/spec/template/spec/containers/{container_index}/resources/requests/{resource_type.value}"
-            current_value = getattr(object_data.allocations, "requests").get(resource_type)
+                request_patch_path = f"/spec/jobTemplate/spec/template/spec/containers/{container_index}/resources/requests/{resource_type.value}"
+            
+            current_request = getattr(object_data.allocations, "requests").get(resource_type)
+            current_limit = getattr(object_data.allocations, "limits").get(resource_type)
+            
             # Format the resource value appropriately
             if resource_type == ResourceType.CPU:
                 resource_value = f"{int(recommended_value * 1000)}m"
-                current_value = f"{int(current_value * 1000)}m"
+                current_request_str = f"{int(current_request * 1000)}m"
+                current_limit_str = f"{int(current_limit * 1000)}m" if current_limit else None
             elif resource_type == ResourceType.Memory:
                 resource_value = format_resource(recommended_value)
-                current_value = format_resource(current_value)
+                current_request_str = format_resource(current_request)
+                current_limit_str = format_resource(current_limit) if current_limit else None
             else:
                 resource_value = str(recommended_value)
-                current_value = str(current_value)
+                current_request_str = str(current_request)
+                current_limit_str = str(current_limit) if current_limit else None
 
             patch = [{
                 "op": "replace",
-                "path": patch_path,
+                "path": request_patch_path,
                 "value": resource_value
             }]
-            if current_value == resource_value:
-                logger.info(f"Skipping {resource_type.value} recommendation patch, no change for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_value} == recommended={resource_value}")
+            
+            # Check if we need to update the limit as well
+            if current_limit is not None and current_limit < recommended_value:
+                limit_patch_path = f"/spec/template/spec/containers/{container_index}/resources/limits/{resource_type.value}"
+                if object_data.kind == "CronJob":
+                    limit_patch_path = f"/spec/jobTemplate/spec/template/spec/containers/{container_index}/resources/limits/{resource_type.value}"
+                
+                patch.append({
+                    "op": "replace",
+                    "path": limit_patch_path,
+                    "value": resource_value  # Set limit to same value as request
+                })
+                
+                logger.info(f"DRY RUN={dry_run} Will also update {resource_type.value} limit for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_limit_str} -> recommended={resource_value} (to match new request)")
+            
+            if current_request_str == resource_value:
+                logger.info(f"Skipping {resource_type.value} recommendation patch, no change for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_request_str} == recommended={resource_value}")
                 return True
-            logger.info(f"DRY RUN={dry_run} Applying {resource_type.value} recommendation for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_value} -> recommended={resource_value}")
+            
+            logger.info(f"DRY RUN={dry_run} Applying {resource_type.value} recommendation for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_request_str} -> recommended={resource_value}")
             if not dry_run:
                 # Apply the patch based on workload type
                 success = await self._patch_workload(object_data, patch)
                 if success:
-                    logger.info(f"Successfully applied {resource_type.value} recommendation to {object_data.kind} {object_data.namespace}/{object_data.name}")
+                    patch_description = f"{resource_type.value} request"
+                    if len(patch) > 1:  # Also updated limit
+                        patch_description += " and limit"
+                    logger.info(f"Successfully applied {patch_description} recommendation to {object_data.kind} {object_data.namespace}/{object_data.name}")
                     return True
                 else:
                     logger.error(f"Failed to apply {resource_type.value} recommendation to {object_data.kind} {object_data.namespace}/{object_data.name}")
