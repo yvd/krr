@@ -220,7 +220,7 @@ def load_commands() -> None:
                     help="reduce below min if under configured percent of min value",
                     rich_help_panel="Recommendation Settings",
                 ),
-                enable_below_min_percent: int = typer.Option(
+                enable_below_min_threshold: int = typer.Option(
                     20, "--bw-min-th", help="min percent", rich_help_panel="Recommendation Settings"
                 ),
                 enable_below_min_reduce: int = typer.Option(
@@ -382,8 +382,8 @@ def load_commands() -> None:
                         cpu_min_value=cpu_min_value,
                         memory_min_value=memory_min_value,
                         enable_below_min=enable_below_min,
-                        enable_below_min_percent=enable_below_min_percent,
-                        enable_below_min_reduce=enable_below_min_reduce
+                        enable_below_min_threshold=enable_below_min_threshold,
+                        enable_below_min_reduce=enable_below_min_reduce,
                         quiet=quiet,
                         log_to_stderr=log_to_stderr,
                         width=width,
