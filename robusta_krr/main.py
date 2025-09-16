@@ -214,6 +214,18 @@ def load_commands() -> None:
                     help="Sets the minimum recommended memory value in MB.",
                     rich_help_panel="Recommendation Settings",
                 ),
+                enable_below_min: bool = typer.Option(
+                    False,
+                    "--bw-min",
+                    help="reduce below min if under configured percent of min value",
+                    rich_help_panel="Recommendation Settings",
+                ),
+                enable_below_min_percent: int = typer.Option(
+                    20, "--bw-min-th", help="min percent", rich_help_panel="Recommendation Settings"
+                ),
+                enable_below_min_reduce: int = typer.Option(
+                    2, "--bw-min-rd", help="reduce min to (min/this_value)", rich_help_panel="Recommendation Settings"
+                ),
                 max_workers: int = typer.Option(
                     10,
                     "--max-workers",
@@ -369,6 +381,9 @@ def load_commands() -> None:
                         verbose=verbose,
                         cpu_min_value=cpu_min_value,
                         memory_min_value=memory_min_value,
+                        enable_below_min=enable_below_min,
+                        enable_below_min_percent=enable_below_min_percent,
+                        enable_below_min_reduce=enable_below_min_reduce
                         quiet=quiet,
                         log_to_stderr=log_to_stderr,
                         width=width,
@@ -388,11 +403,11 @@ def load_commands() -> None:
                         scan_id=scan_id,
                         named_sinks=named_sinks,
                         patcher_mode=patcher_mode,
-                        )
+                    )
                     Config.set_config(config)
                 except ValidationError as e:
                     logger.exception("Error occured while parsing arguments")
-                    publish_input_error( publish_scan_url, scan_id, start_time, str(e), named_sinks)
+                    publish_input_error(publish_scan_url, scan_id, start_time, str(e), named_sinks)
                 else:
                     runner = Runner()
                     exit_code = asyncio.run(runner.run())

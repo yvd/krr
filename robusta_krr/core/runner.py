@@ -393,6 +393,18 @@ class Runner:
         else:
             return 0
 
+
+    def _readable_value(self, value: Optional[float], resource: ResourceType) -> Optional[str]:
+        if value is None or math.isnan(value):
+            return "NaN"
+        
+        if resource == ResourceType.CPU:
+            return int(value*1000).__str__() + "m"
+        elif resource == ResourceType.Memory:
+            return int(value/(1024*1024)).__str__() + "Mi"
+        else:
+            return "NA"
+
     def _round_value(self, value: Optional[float], resource: ResourceType) -> Optional[float]:
         if value is None or math.isnan(value):
             return value
@@ -408,20 +420,44 @@ class Runner:
             # NOTE: We use 1 as the minimal value for other resources
             prec_power = 1
 
-        rounded = math.ceil(value * prec_power) / prec_power
+        return math.ceil(value * prec_power) / prec_power
 
+    def _round_value_with_min_cap(self, value: Optional[float], resource: ResourceType) -> Optional[float]:
+        rounded = self._round_value(value, resource)
         minimal = self.__get_resource_minimal(resource)
+        if not rounded:
+            return minimal
+        if self._is_eligible_for_reduced_min_target(value, resource):
+            minimal = minimal / (settings.enable_below_min_reduce)
         return max(rounded, minimal)
 
     def _format_result(self, result: RunResult) -> RunResult:
         return {
             resource: ResourceRecommendation(
-                request=self._round_value(recommendation.request, resource),
-                limit=self._round_value(recommendation.limit, resource),
+                request=self._round_value_with_min_cap(recommendation.request, resource),
+                limit=self._round_value_with_min_cap(recommendation.limit, resource),
                 info=recommendation.info,
             )
             for resource, recommendation in result.items()
         }
+
+    def _is_eligible_for_reduced_min_target(self, request: Optional[float], resource: ResourceType) -> bool:
+        if not settings.enable_below_min:
+            return False
+        if not request:
+            return False
+        multiplier = 100/(settings.enable_below_min_threshold)
+        minimal = self.__get_resource_minimal(resource)
+        return (multiplier * request) < minimal
+
+    def _log(self, k8s_object: K8sObjectData, result: RunResult) -> None:
+        for resource, recommendation in result.items():
+            request = self._round_value(recommendation.request, resource)
+            if not request:
+                continue
+            if  self._is_eligible_for_reduced_min_target(request, resource):
+                minimal = self.__get_resource_minimal(resource)
+                logger.info(f"Underutil log::: {resource.value} Recommendation {self._readable_value(request, resource)} less than {settings.enable_below_min_threshold}% of Min {self._readable_value(minimal, resource)} for workload {k8s_object.__str__()}")
 
     async def _calculate_object_recommendations(self, object: K8sObjectData) -> Optional[RunResult]:
         try:
@@ -455,11 +491,13 @@ class Runner:
             # But keep in mind that numpy calcluations will not block the GIL
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(self._executor, self._strategy.run, metrics, object)
-
+            self._log(object, result)
             logger.info(f"Calculated recommendations for {object} (using {len(metrics)} metrics)")
             return self._format_result(result)
         except Exception as e:
             logger.error(f"An error occurred while calculating recommendations for {object}: {e}")
+            stacktrace = traceback.format_exc()
+            logger.error(f"Stack trace: {stacktrace}")
             return None
 
     async def _check_data_availability(self, cluster: Optional[str]) -> None:
