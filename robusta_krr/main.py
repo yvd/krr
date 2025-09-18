@@ -345,6 +345,12 @@ def load_commands() -> None:
                     help="Mode to apply the recommendations",
                     rich_help_panel="Recommendation Settings",
                 ),
+                skip_patch_containers: Optional[List[str]] = typer.Option(
+                    None,
+                    "--skip-patch-containers", "-skip",
+                    help="A list of containers to skip patching",
+                    rich_help_panel="Recommendation Settings",
+                ),
                 **strategy_args,
             ) -> None:
                 f"""Run KRR using the `{_strategy_name}` strategy"""
@@ -403,6 +409,7 @@ def load_commands() -> None:
                         scan_id=scan_id,
                         named_sinks=named_sinks,
                         patcher_mode=patcher_mode,
+                        skip_patch_containers=skip_patch_containers
                     )
                     Config.set_config(config)
                 except ValidationError as e:

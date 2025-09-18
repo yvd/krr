@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, List
 
 import pydantic as pd
 from kubernetes import config
@@ -83,6 +83,7 @@ class Config(pd.BaseSettings):
 
     # Patcher Mode Settings
     patcher_mode: Optional[PatcherMode] = pd.Field(None)
+    skip_patch_containers: Optional[List[str]] = pd.Field(None)
     other_args: dict[str, Any]
 
     # Internal

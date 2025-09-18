@@ -119,8 +119,11 @@ class Runner:
         custom_print(formatted, rich=rich, force=True)
         dry_run = settings.patcher_mode == PatcherMode.DRY_RUN
         if settings.patcher_mode == PatcherMode.ON or dry_run:
-            logger.info(f"Applying recommendations DRY RUN={dry_run}")
-            await self._apply_recommendations(result, dry_run)
+            skip_set = set()
+            if settings.skip_patch_containers:
+                skip_set = set(settings.skip_patch_containers)
+            logger.info(f"Applying recommendations DRY RUN={dry_run} skip_containers={skip_set}")
+            await self._apply_recommendations(result, dry_run, skip_set)
         else:
             logger.info("Skipping recommendations")
 
@@ -174,11 +177,14 @@ class Runner:
                 os.remove(file_name)
 
     # FIXME: currently we are only applying request recommendations and only for deployments
-    async def _apply_recommendations(self, result: Result, dry_run: bool):
+    async def _apply_recommendations(self, result: Result, dry_run: bool, skip_containers_set: set):
         # Collect all patch tasks to run them concurrently
         patch_tasks = []
         
         for scan in result.scans:
+            if scan.object.container in skip_containers_set:
+                logger.info(f"Skipping {scan.object.container} for applying resource recommendation")
+                continue
             for resource in ResourceType:
                 recommendation = scan.recommended.requests[resource]
                 # Handle both Recommendation objects and direct values
