@@ -84,6 +84,7 @@ class Config(pd.BaseSettings):
     # Patcher Mode Settings
     patcher_mode: Optional[PatcherMode] = pd.Field(None)
     skip_patch_containers: Optional[List[str]] = pd.Field(None)
+    skip_containers_with_phrase: Optional[List[str]] = pd.Field(None)
     other_args: dict[str, Any]
 
     # Internal
