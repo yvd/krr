@@ -352,7 +352,7 @@ def load_commands() -> None:
                     rich_help_panel="Recommendation Settings",
                 ),
                 skip_containers_with_phrase: Optional[List[str]] = typer.Option(
-                    None,
+                    ["pre-prod"],
                     "--skip-containers-with-phrase", "-skp",
                     help="A list of phrases, if a container name contains one of these phrases it will be skipped",
                     rich_help_panel="Recommendation Settings",
