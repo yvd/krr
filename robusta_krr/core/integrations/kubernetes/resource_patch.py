@@ -132,6 +132,19 @@ class ResourcePatcher:
                 "path": request_patch_path,
                 "value": resource_value
             }]
+            updating_limit = False
+            # For CPU, remove limit if it exists
+            if current_limit is not None and resource_type.value == "cpu":
+                limit_patch_path = f"/spec/template/spec/containers/{container_index}/resources/limits/{resource_type.value}"
+                if object_data.kind == "CronJob":
+                    limit_patch_path = f"/spec/jobTemplate/spec/template/spec/containers/{container_index}/resources/limits/{resource_type.value}"
+
+                patch.append({
+                    "op": "remove",
+                    "path": limit_patch_path
+                })
+                updating_limit = True
+                logger.info(f"DRY RUN={dry_run} Will also remove {resource_type.value} limit for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_limit_str}")
             
             # For memory update limit = request if they differ
             if current_limit is not None and current_limit != recommended_value and resource_type.value == "memory":
@@ -144,10 +157,10 @@ class ResourcePatcher:
                     "path": limit_patch_path,
                     "value": resource_value  # Set limit to same value as request
                 })
-                
+                updating_limit = True
                 logger.info(f"DRY RUN={dry_run} Will also update {resource_type.value} limit for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_limit_str} -> recommended={resource_value} (to match new request)")
             
-            if current_request_str == resource_value:
+            if current_request_str == resource_value and not updating_limit:
                 logger.info(f"Skipping {resource_type.value} recommendation patch, no change for {object_data.kind} {object_data.namespace}/{object_data.name}, container {object_data.container}: current={current_request_str} == recommended={resource_value}")
                 return True
             
