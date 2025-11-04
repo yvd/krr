@@ -133,8 +133,8 @@ class ResourcePatcher:
                 "value": resource_value
             }]
             
-            # Check if we need to update the limit as well
-            if current_limit is not None and current_limit < recommended_value:
+            # For memory update limit = request if they differ
+            if current_limit is not None and current_limit != recommended_value and resource_type.value == "memory":
                 limit_patch_path = f"/spec/template/spec/containers/{container_index}/resources/limits/{resource_type.value}"
                 if object_data.kind == "CronJob":
                     limit_patch_path = f"/spec/jobTemplate/spec/template/spec/containers/{container_index}/resources/limits/{resource_type.value}"
